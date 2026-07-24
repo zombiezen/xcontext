@@ -15,27 +15,14 @@ jobs:
     name: go test
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
-      - name: Install Nix
-        uses: cachix/install-nix-action@v25
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes ca-derivations impure-derivations
-      - name: Run tests
-        run: nix flake check --print-build-logs
-  windows:
-    name: go test (Windows)
-    runs-on: windows-2022
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install Go
-        uses: actions/setup-go@v3.2.1
+        uses: actions/setup-go@v7
         with:
-          go-version: "1.19.1"
+          go-version-file: go.mod
       - name: Run tests
-        run: go test -race
+        run: go test -mod=readonly -race
