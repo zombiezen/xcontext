@@ -127,6 +127,6 @@ func (k *keepAlive) stop(e error) {
 	close(k.done)
 }
 
-func (k *keepAlive) Value(key interface{}) interface{} {
+func (k *keepAlive) Value(key any) any {
 	return k.parent.Value(key)
 }
