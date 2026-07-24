@@ -1,4 +1,4 @@
-// Copyright 2024 Ross Light
+// Copyright 2024-2026 Roxy Light
 // SPDX-License-Identifier: BSD-3-Clause
 
 package xcontext
@@ -6,14 +6,13 @@ package xcontext
 import (
 	"context"
 	"io"
-	"sync"
 )
 
 type closer struct {
-	closed chan struct{}
+	closer        io.Closer
+	stopAfterFunc func() bool
 
-	once   sync.Once
-	closer io.Closer
+	closed chan struct{}
 	err    error
 }
 
@@ -27,46 +26,24 @@ type closer struct {
 // Closing the returned [io.Closer] releases resources associated with it,
 // so code should close the returned [io.Closer] as soon as c is no longer being used.
 func CloseWhenDone(ctx context.Context, c io.Closer) io.Closer {
-	done := ctx.Done()
-	if done == nil {
-		// If the Context will never be Done, skip the goroutine.
-		return &closer{closer: c}
+	cc := &closer{
+		closer: c,
+		closed: make(chan struct{}),
 	}
-	select {
-	case <-done:
-		// If the Context is already done, close c and return the original context.
-		err := c.Close()
-		return nopCloser{err}
-	default:
-		cc := &closer{
-			closer: c,
-			closed: make(chan struct{}),
-		}
-		go func() {
-			select {
-			case <-ctx.Done():
-				cc.Close()
-			case <-cc.closed:
-			}
-		}()
-		return cc
-	}
+	cc.stopAfterFunc = context.AfterFunc(ctx, cc.close)
+	return cc
 }
 
 func (c *closer) Close() error {
-	c.once.Do(func() {
-		if c.closed != nil {
-			close(c.closed)
-		}
-		c.err = c.closer.Close()
-	})
+	if c.stopAfterFunc() {
+		c.close()
+	} else {
+		<-c.closed
+	}
 	return c.err
 }
 
-type nopCloser struct {
-	err error
-}
-
-func (c nopCloser) Close() error {
-	return c.err
+func (c *closer) close() {
+	c.err = c.closer.Close()
+	close(c.closed)
 }

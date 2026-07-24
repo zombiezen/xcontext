@@ -1,4 +1,4 @@
-// Copyright 2024 Ross Light
+// Copyright 2024-2026 Roxy Light
 // SPDX-License-Identifier: BSD-3-Clause
 
 package xcontext
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 )
 
 func TestCloseWhenDone(t *testing.T) {
@@ -73,22 +73,25 @@ func TestCloseWhenDone(t *testing.T) {
 	})
 
 	t.Run("AlreadyDone", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		myError := errors.New("bork")
-		c1 := newFakeCloser(myError)
+		synctest.Test(t, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			myError := errors.New("bork")
+			c1 := newFakeCloser(myError)
 
-		c2 := CloseWhenDone(ctx, c1)
-		if got, want := c1.count(), 1; got != want {
-			t.Errorf("Close() called %d times; want %d", got, want)
-		}
+			c2 := CloseWhenDone(ctx, c1)
+			synctest.Wait()
+			if got, want := c1.count(), 1; got != want {
+				t.Errorf("Close() called %d times; want %d", got, want)
+			}
 
-		if err := c2.Close(); err != myError {
-			t.Errorf("Close() = %v; want %v", err, myError)
-		}
-		if got, want := c1.count(), 1; got != want {
-			t.Errorf("Close() called %d times; want %d", got, want)
-		}
+			if err := c2.Close(); err != myError {
+				t.Errorf("Close() = %v; want %v", err, myError)
+			}
+			if got, want := c1.count(), 1; got != want {
+				t.Errorf("Close() called %d times; want %d", got, want)
+			}
+		})
 	})
 
 	t.Run("DoneBeforeClose", func(t *testing.T) {
@@ -115,29 +118,29 @@ func TestCloseWhenDone(t *testing.T) {
 	})
 
 	t.Run("DoneAfterClose", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		myError := errors.New("bork")
-		c1 := newFakeCloser(myError)
+		synctest.Test(t, func(*testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			myError := errors.New("bork")
+			c1 := newFakeCloser(myError)
 
-		c2 := CloseWhenDone(ctx, c1)
-		if got, want := c1.count(), 0; got != want {
-			t.Errorf("Close() called %d times; want %d", got, want)
-		}
+			c2 := CloseWhenDone(ctx, c1)
+			if got, want := c1.count(), 0; got != want {
+				t.Errorf("Close() called %d times; want %d", got, want)
+			}
 
-		if err := c2.Close(); err != myError {
-			t.Errorf("Close() = %v; want %v", err, myError)
-		}
-		if got, want := c1.count(), 1; got != want {
-			t.Errorf("Close() called %d times; want %d", got, want)
-		}
+			if err := c2.Close(); err != myError {
+				t.Errorf("Close() = %v; want %v", err, myError)
+			}
+			if got, want := c1.count(), 1; got != want {
+				t.Errorf("Close() called %d times; want %d", got, want)
+			}
 
-		cancel()
-		// Not deterministic that it will catch the defect,
-		// but we're checking for the absence of something occuring.
-		time.Sleep(1 * time.Millisecond)
-		if got, want := c1.count(), 1; got != want {
-			t.Errorf("Close() called %d times after cancel; want %d", got, want)
-		}
+			cancel()
+			synctest.Wait()
+			if got, want := c1.count(), 1; got != want {
+				t.Errorf("Close() called %d times after cancel; want %d", got, want)
+			}
+		})
 	})
 }
 
