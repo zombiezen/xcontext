@@ -22,14 +22,13 @@ import (
 //
 // [KeepAlive] should be preferred over IgnoreDeadline in most cases to prevent work from
 // preventing shutdown.
-func IgnoreDeadline(ctx context.Context) context.Context { return noDeadlineContext{ctx} }
-
-type noDeadlineContext struct{ parent context.Context }
-
-func (v noDeadlineContext) Deadline() (time.Time, bool)       { return time.Time{}, false }
-func (v noDeadlineContext) Done() <-chan struct{}             { return nil }
-func (v noDeadlineContext) Err() error                        { return nil }
-func (v noDeadlineContext) Value(key interface{}) interface{} { return v.parent.Value(key) }
+//
+// Deprecated: Equivalent to [context.WithoutCancel].
+//
+//go:fix inline
+func IgnoreDeadline(ctx context.Context) context.Context {
+	return context.WithoutCancel(ctx)
+}
 
 // KeepAlive returns a context that keeps all the values of its parent context
 // and ensures that it is not marked Done for at least d time.
@@ -47,7 +46,7 @@ func KeepAlive(parent context.Context, d time.Duration) (context.Context, contex
 	case <-parentDone:
 		// Optimization: if the parent context has already been canceled, then the
 		// given duration is the deadline.
-		return context.WithDeadline(IgnoreDeadline(parent), minDeadline)
+		return context.WithDeadline(context.WithoutCancel(parent), minDeadline)
 	default:
 	}
 
