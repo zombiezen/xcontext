@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -14,20 +15,23 @@ func TestKeepAlive(t *testing.T) {
 	const keepAlive = 10 * time.Millisecond
 
 	t.Run("ParentBackground", func(t *testing.T) {
-		k, cancelK := KeepAlive(context.Background(), keepAlive)
-		defer cancelK()
-		time.Sleep(keepAlive)
-		select {
-		case <-k.Done():
-			t.Errorf("KeepAlive(ctx, %v).Done() closed before cancel", keepAlive)
-		default:
-		}
+		synctest.Test(t, func(t *testing.T) {
+			k, cancelK := KeepAlive(context.Background(), keepAlive)
+			defer cancelK()
+			time.Sleep(keepAlive)
+			synctest.Wait()
+			select {
+			case <-k.Done():
+				t.Errorf("KeepAlive(ctx, %v).Done() closed before cancel", keepAlive)
+			default:
+			}
 
-		cancelK()
-		<-k.Done()
-		if got := k.Err(); !errors.Is(got, context.Canceled) {
-			t.Errorf("KeepAlive(ctx, %v).Err() = %v; want %v", keepAlive, got, context.Canceled)
-		}
+			cancelK()
+			<-k.Done()
+			if got := k.Err(); !errors.Is(got, context.Canceled) {
+				t.Errorf("KeepAlive(ctx, %v).Err() = %v; want %v", keepAlive, got, context.Canceled)
+			}
+		})
 	})
 
 	t.Run("CancelParentBeforeWait", func(t *testing.T) {
@@ -82,18 +86,21 @@ func TestKeepAlive(t *testing.T) {
 	})
 
 	t.Run("CancelChildAfterWait", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		synctest.Test(t, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-		k, cancelK := KeepAlive(ctx, keepAlive)
-		defer cancelK()
+			k, cancelK := KeepAlive(ctx, keepAlive)
+			defer cancelK()
 
-		time.Sleep(keepAlive)
-		cancelK()
-		<-k.Done()
-		if got := k.Err(); !errors.Is(got, context.Canceled) {
-			t.Errorf("KeepAlive(ctx, %v).Err() = %v; want %v", keepAlive, got, context.Canceled)
-		}
+			time.Sleep(keepAlive)
+			synctest.Wait()
+			cancelK()
+			<-k.Done()
+			if got := k.Err(); !errors.Is(got, context.Canceled) {
+				t.Errorf("KeepAlive(ctx, %v).Err() = %v; want %v", keepAlive, got, context.Canceled)
+			}
+		})
 	})
 
 	t.Run("ExtendDeadline", func(t *testing.T) {
